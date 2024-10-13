@@ -77,7 +77,7 @@ class MultiHeadAttention(nn.Module):
             self.heads.append(head)
 
         self.linear = nn.Linear(embedding_dim, embedding_dim)
-        self.dropout = nn.Dropout(0)
+        self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
         attention_list = [head(x) for head in self.heads]
@@ -91,15 +91,16 @@ class MLP(nn.Module):
         super().__init__()
         self.linear1 = nn.Linear(embedding_dim, hidden_dim)
         self.acctivation = nn.GELU()
+        self.dropout1 = nn.Dropout(0.5)
         self.linear2 = nn.Linear(hidden_dim, embedding_dim)
-        self.dropout = nn.Dropout(0)
+        self.dropout2 = nn.Dropout(0.5)
 
     def forward(self, x):
         x = self.linear1(x)
         x = self.acctivation(x)
-        x = self.dropout(x)
+        x = self.dropout1(x)
         x = self.linear2(x)
-        x = self.dropout(x)
+        x = self.dropout2(x)
         return x
 
 class TransformerBlock(nn.Module):
@@ -130,11 +131,13 @@ class ViT(nn.Module):
             block = TransformerBlock(embedding_dim, n_heads, hidden_dim)
             self.blocks.append(block)
         self.mlp_head = nn.Linear(embedding_dim, num_classes) # only the cls token will get passed into the mlp head
+        self.activation = nn.Tanh()
 
     def forward(self, x):
         x = self.embedding_model(x)
         for block in self.blocks:
             x = block(x)
         logits = self.mlp_head(x[:,0,:])
+        logits = self.activation(logits)
 
         return logits
