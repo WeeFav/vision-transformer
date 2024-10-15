@@ -3,13 +3,13 @@ import torch.nn as nn
 import math
 
 class PatchEmbeddings(nn.Module):
-    def __init__(self, image_size, patch_size, num_channels, embedding_dim):
+    def __init__(self, config):
         super().__init__()
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.embedding_dim = embedding_dim
-        self.num_patches = (image_size // patch_size) ** 2
+        self.image_size = config['image_size']
+        self.patch_size = config['patch_size']
+        self.num_channels = config['num_channels']
+        self.embedding_dim = config['embedding_dim']
+        self.num_patches = (config['image_size'] // config['patch_size']) ** 2
 
         self.projection = nn.Conv2d(self.num_channels, self.embedding_dim, kernel_size=self.patch_size, stride=self.patch_size)
 
@@ -20,30 +20,30 @@ class PatchEmbeddings(nn.Module):
         return x
 
 class Embeddings(nn.Module):
-    def __init__(self, image_size, patch_size, num_channels, embedding_dim, batch_size):
+    def __init__(self, config):
         super().__init__()
-        self.patch_embeddings = PatchEmbeddings(image_size, patch_size, num_channels, embedding_dim)
-        self.cls_tokens = nn.Parameter(torch.randn(batch_size, 1, embedding_dim))
-        self.position_embeddings = nn.Parameter(torch.randn(batch_size, self.patch_embeddings.num_patches + 1, embedding_dim))
-        self.dropout = nn.Dropout(0)
+        self.patch_embeddings = PatchEmbeddings(config)
+        self.cls_tokens = nn.Parameter(torch.randn(config['batch_size'], 1, config['embedding_dim']))
+        self.position_embeddings = nn.Parameter(torch.randn(config['batch_size'], self.patch_embeddings.num_patches + 1, config['embedding_dim']))
+        # self.dropout = nn.Dropout(0)
 
     def forward(self, x):
         embeddings = self.patch_embeddings(x)
         embeddings = torch.cat((self.cls_tokens, embeddings), dim=1)
         embeddings = embeddings + self.position_embeddings
-        embeddings = self.dropout(embeddings)
+        # embeddings = self.dropout(embeddings)
         return embeddings
     
 class AttentionHead(nn.Module):
-    def __init__(self, embedding_dim, d_k, bias):
+    def __init__(self, config, d_k, bias):
         super().__init__()
-        self.embedding_dim = embedding_dim
+        self.embedding_dim = config['embedding_dim']
         self.d_k = d_k
-        self.query = nn.Linear(embedding_dim, self.d_k, bias=bias)
-        self.key = nn.Linear(embedding_dim, self.d_k, bias=bias)
-        self.value = nn.Linear(embedding_dim, self.d_k, bias=bias)
-        self.qkv_dropout = nn.Dropout(0)
-        self.dropout = nn.Dropout(0)
+        self.query = nn.Linear(self.embedding_dim, self.d_k, bias=bias)
+        self.key = nn.Linear(self.embedding_dim, self.d_k, bias=bias)
+        self.value = nn.Linear(self.embedding_dim, self.d_k, bias=bias)
+        # self.qkv_dropout = nn.Dropout(0)
+        # self.dropout = nn.Dropout(0)
 
     def forward(self, x):
         query = self.query(x)
@@ -63,20 +63,20 @@ class AttentionHead(nn.Module):
         return attention
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, embedding_dim, n_heads, bias):
+    def __init__(self, config, bias):
         super().__init__()
-        self.embedding_dim = embedding_dim
-        self.n_heads = n_heads
-        self.d_k = embedding_dim // n_heads # this is usually how d_k is calculated, since we need to split number of embeddedings across number of heads
-        self.all_head_size = n_heads * self.d_k
+        self.embedding_dim = config['embedding_dim']
+        self.n_heads = config['n_heads']
+        self.d_k = self.embedding_dim // self.n_heads # this is usually how d_k is calculated, since we need to split number of embeddedings across number of heads
+        self.all_head_size = self.n_heads * self.d_k
         self.bias = bias
 
         self.heads = nn.ModuleList([])
-        for n in range(n_heads):
-            head = AttentionHead(embedding_dim, self.d_k, bias=bias)
+        for n in range(self.n_heads):
+            head = AttentionHead(config, self.d_k, bias=bias)
             self.heads.append(head)
 
-        self.linear = nn.Linear(embedding_dim, embedding_dim)
+        self.linear = nn.Linear(self.embedding_dim, self.embedding_dim)
         self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
@@ -87,13 +87,13 @@ class MultiHeadAttention(nn.Module):
         return attention_cat
 
 class MLP(nn.Module):
-    def __init__(self, embedding_dim, hidden_dim):
+    def __init__(self, config):
         super().__init__()
-        self.linear1 = nn.Linear(embedding_dim, hidden_dim)
+        self.linear1 = nn.Linear(config['embedding_dim'], config['hidden_dim'])
         self.acctivation = nn.GELU()
-        self.dropout1 = nn.Dropout(0.5)
-        self.linear2 = nn.Linear(hidden_dim, embedding_dim)
-        self.dropout2 = nn.Dropout(0.5)
+        self.dropout1 = nn.Dropout(config['dropout'])
+        self.linear2 = nn.Linear(config['hidden_dim'], config['embedding_dim'])
+        self.dropout2 = nn.Dropout(config['dropout'])
 
     def forward(self, x):
         x = self.linear1(x)
@@ -104,12 +104,12 @@ class MLP(nn.Module):
         return x
 
 class TransformerBlock(nn.Module):
-    def __init__(self, embedding_dim, n_heads, hidden_dim):
+    def __init__(self, config):
         super().__init__()
-        self.LN1 = nn.LayerNorm(embedding_dim, eps=1e-6)
-        self.MHA = MultiHeadAttention(embedding_dim, n_heads, bias=True)
-        self.LN2 = nn.LayerNorm(embedding_dim, eps=1e-6)
-        self.MLP = MLP(embedding_dim, hidden_dim)
+        self.LN1 = nn.LayerNorm(config['embedding_dim'], eps=1e-6)
+        self.MHA = MultiHeadAttention(config, bias=True)
+        self.LN2 = nn.LayerNorm(config['embedding_dim'], eps=1e-6)
+        self.MLP = MLP(config)
 
     def forward(self, x):
         input = x
@@ -123,21 +123,21 @@ class TransformerBlock(nn.Module):
         return x
 
 class ViT(nn.Module):
-    def __init__(self, image_size, patch_size, num_channels, embedding_dim, batch_size, n_heads, hidden_dim, num_blocks, num_classes):
+    def __init__(self, config):
         super().__init__()
-        self.embedding_model = Embeddings(image_size, patch_size, num_channels, embedding_dim, batch_size)
+        self.embedding_model = Embeddings(config)
         self.blocks = nn.ModuleList([])
-        for _ in range(num_blocks):
-            block = TransformerBlock(embedding_dim, n_heads, hidden_dim)
+        for _ in range(config['num_blocks']):
+            block = TransformerBlock(config)
             self.blocks.append(block)
-        self.mlp_head = nn.Linear(embedding_dim, num_classes) # only the cls token will get passed into the mlp head
-        self.activation = nn.Tanh()
+        self.mlp_head = nn.Linear(config['embedding_dim'], config['num_classes']) # only the cls token will get passed into the mlp head
+        # self.activation = nn.Tanh()
 
     def forward(self, x):
         x = self.embedding_model(x)
         for block in self.blocks:
             x = block(x)
         logits = self.mlp_head(x[:,0,:])
-        logits = self.activation(logits)
+        # logits = self.activation(logits)
 
         return logits

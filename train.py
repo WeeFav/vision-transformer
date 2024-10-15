@@ -8,6 +8,8 @@ from vit import ViT
 import sys
 import tqdm
 import matplotlib.pyplot as plt
+import yaml
+import os
 
 CLASSES = ['plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
 
@@ -32,45 +34,42 @@ def load_cifar10(batch_size):
     
     return trainloader, testloader
 
-def main():
+def main(run_dir):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"using {device}")
+    
 
     # model config
-    image_size = 224
-    patch_size = 16
-    num_channels = 3
-    embedding_dim = 384
-    n_heads = 6
-    hidden_dim = 1536
-    num_blocks = 12
-    num_classes = len(CLASSES)
+    config = {
+        'image_size': 224,
+        'patch_size': 16,
+        'num_channels': 3,
+        'embedding_dim': 384,
+        'n_heads': 6,
+        'hidden_dim': 1536,
+        'num_blocks': 4,
+        'dropout': 0.5,
+        'num_classes': len(CLASSES),
+        'epochs': 200,
+        'lr': 0.001,
+        'batch_size': 64
+    }
 
-    # training config
-    epochs = 200
-    lr = 0.001
-    batch_size = 64
+    with open(os.path.join(run_dir, 'config.yaml'), 'w') as file:
+        yaml.dump(config, file, default_flow_style=False, sort_keys=False)
 
     # get dataloader
-    trainloader, testloader = load_cifar10(batch_size)
+    trainloader, testloader = load_cifar10(config['batch_size'])
 
     # model
-    model = ViT(image_size, 
-                patch_size, 
-                num_channels, 
-                embedding_dim, 
-                batch_size, 
-                n_heads, 
-                hidden_dim, 
-                num_blocks, 
-                num_classes)
+    model = ViT(config)
     model = model.to(device)
 
     # loss
     loss_fn = nn.CrossEntropyLoss()
 
     # optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config['lr'])
 
     train_loss_list = []
     train_accuracy_list = []
@@ -78,7 +77,7 @@ def main():
     test_accuracy_list = []
 
     # training and evaluating on test set loop
-    for i in range(epochs):
+    for i in range(config['epochs']):
         # training
         model.train()
         total_train_loss = 0
@@ -139,22 +138,30 @@ def main():
         plt.plot(train_loss_list, label="train loss")
         plt.plot(test_loss_list, label="test loss")
         plt.legend()
-        plt.savefig("./loss")
+        plt.savefig(os.path.join(run_dir, 'loss'))
 
         # graph accuracy
         plt.figure(2)
         plt.plot(train_accuracy_list, label="train accuracy")
         plt.plot(test_accuracy_list, label="test accuracy")
         plt.legend()
-        plt.savefig("./accuracy")
+        plt.savefig(os.path.join(run_dir, 'accuracy'))
 
         plt.close(1)
         plt.close(2)
 
-        print(f"Finish epoch {i}. Train loss: {avg_train_loss:.4f}. Test loss: {avg_test_loss:.4f}. Train Acc: {train_accuracy:.4f}. Test Acc: {test_accuracy:.4f}.")
+        with open(os.path.join(run_dir, 'log.txt'), 'a') as file:
+            sys.stdout = file
+            print(f"Finish epoch {i}. Train loss: {avg_train_loss:.4f}. Test loss: {avg_test_loss:.4f}. Train Acc: {train_accuracy:.4f}. Test Acc: {test_accuracy:.4f}.")
+            sys.stdout = sys.__stdout__
+            print(f"Finish epoch {i}. Train loss: {avg_train_loss:.4f}. Test loss: {avg_test_loss:.4f}. Train Acc: {train_accuracy:.4f}. Test Acc: {test_accuracy:.4f}.")
 
         # save model
-        torch.save(model.state_dict(), "./model_weights.pt")
+        torch.save(model.state_dict(), os.path.join(run_dir, 'model_weights.pt'))
 
 if __name__ == '__main__':
-    main()
+    run_num = sys.argv[1]
+    run_dir = f'./runs/run{run_num}'
+    os.mkdir(run_dir)
+    
+    main(run_dir)
