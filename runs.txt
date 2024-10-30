@@ -1,0 +1,28 @@
+
+0: original ViT with 0.5 dropout
+1: reduce num heads to 6 to reduce model complexity to avoid overfitting
+2: original simple ViT for CIFAR10 without data augmentation and batch size of 128
+3: add weight decay, 0.5 dropout for regularization
+4: add cosine scheduler
+5: add AutoAugment and increase epcohs to 1000 to boost diversity
+6: reduce lr to 0.005
+7: no scheduler, reduce lr to 0.001
+8: original simple ViT for CIFAR10
+9: increase epoch to 1000
+10: add 0.5 dropout
+11: 0.1 dropout
+12: change to AutoAugment
+13: change to orignial augmentation, increase lr to 0.03
+14: incrase image size to 224, patch size to 16
+15: incrase embedding dimension to 384, epoch to 500
+16: same as 15
+17: increase hidden dim to 384
+18: increase num heads to 12, decrease embedding dim, hidden dim to 48, 192
+19: increase embedding dim to 384, increase epoch to 1000, decrease lr to 0.001, decrease batch size to 128
+20: decrease num heads to 6 for decrease model complexity, 0.3 dropout for regularization
+21: 0.5 dropout
+22: 0.1 dropout, change to AutoAugment
+
+
+
+

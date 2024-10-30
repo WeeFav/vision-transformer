@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torchvision
-import torchvision.transforms as transforms
+import torchvision.transforms.v2 as transforms
 from torchvision.utils import save_image, make_grid
 import math
 from vit import ViT
@@ -13,23 +13,26 @@ import os
 
 CLASSES = ['plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
 
-def load_cifar10(batch_size):
+def load_cifar10(config):
     # transform image to tensor and normalize to [-1, 1]
-    transform = transforms.Compose(
-        [transforms.ToTensor(),
-         transforms.Resize((224, 224), antialias=True), 
-         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Resize((config['image_size'], config['image_size']), antialias=True), 
+        # transforms.RandomHorizontalFlip(p=0.5),             
+        # transforms.RandomResizedCrop((config['image_size'], config['image_size']), scale=(0.8, 1.0), ratio=(0.75, 1.3333333333333333), interpolation=2, antialias=True),
+        transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     
     # download CIFAR10 dataset. Output images are in PIL format
     trainset = torchvision.datasets.CIFAR10(root='./data/', train=True,
                                             download=True, transform=transform)
     
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, 
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=config['batch_size'], 
                                               shuffle=True, num_workers=4, drop_last=True)
 
     testset = torchvision.datasets.CIFAR10(root='./data/', train=False, 
                                            download=True, transform=transform)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+    testloader = torch.utils.data.DataLoader(testset, batch_size=config['batch_size'],
                                              shuffle=False, num_workers=4, drop_last=True)
     
     return trainloader, testloader
@@ -46,20 +49,23 @@ def main(run_dir):
         'num_channels': 3,
         'embedding_dim': 384,
         'n_heads': 6,
-        'hidden_dim': 1536,
+        'hidden_dim': 192,
         'num_blocks': 4,
-        'dropout': 0.5,
+        'dropout': 0.1,
         'num_classes': len(CLASSES),
-        'epochs': 200,
+        'epochs': 1000,
         'lr': 0.001,
-        'batch_size': 64
+        'lr_decay': None,
+        'weight_decay': 0.01,
+        'batch_size': 128,
+        'data_augment': ['AutoAugment']
     }
 
     with open(os.path.join(run_dir, 'config.yaml'), 'w') as file:
         yaml.dump(config, file, default_flow_style=False, sort_keys=False)
 
     # get dataloader
-    trainloader, testloader = load_cifar10(config['batch_size'])
+    trainloader, testloader = load_cifar10(config)
 
     # model
     model = ViT(config)
@@ -69,7 +75,9 @@ def main(run_dir):
     loss_fn = nn.CrossEntropyLoss()
 
     # optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config['lr'])
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
+    if config['lr_decay'] == 'cosine':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, config['epochs'])
 
     train_loss_list = []
     train_accuracy_list = []
@@ -101,6 +109,9 @@ def main(run_dir):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+        if config['lr_decay'] is not None:
+            scheduler.step()
 
         avg_train_loss = total_train_loss / len(trainloader)
         train_accuracy = total_correct / len(trainloader.dataset)
@@ -152,9 +163,9 @@ def main(run_dir):
 
         with open(os.path.join(run_dir, 'log.txt'), 'a') as file:
             sys.stdout = file
-            print(f"Finish epoch {i}. Train loss: {avg_train_loss:.4f}. Test loss: {avg_test_loss:.4f}. Train Acc: {train_accuracy:.4f}. Test Acc: {test_accuracy:.4f}.")
+            print(f"Finish epoch {i}. Train loss: {avg_train_loss:.4f}. Test loss: {avg_test_loss:.4f}. Train Acc: {train_accuracy:.4f}. Test Acc: {test_accuracy:.4f}. lr: {scheduler.get_last_lr() if config['lr_decay'] is not None else config['lr']}")
             sys.stdout = sys.__stdout__
-            print(f"Finish epoch {i}. Train loss: {avg_train_loss:.4f}. Test loss: {avg_test_loss:.4f}. Train Acc: {train_accuracy:.4f}. Test Acc: {test_accuracy:.4f}.")
+            print(f"Finish epoch {i}. Train loss: {avg_train_loss:.4f}. Test loss: {avg_test_loss:.4f}. Train Acc: {train_accuracy:.4f}. Test Acc: {test_accuracy:.4f}. lr: {scheduler.get_last_lr() if config['lr_decay'] is not None else config['lr']}")
 
         # save model
         torch.save(model.state_dict(), os.path.join(run_dir, 'model_weights.pt'))

@@ -77,7 +77,7 @@ class MultiHeadAttention(nn.Module):
             self.heads.append(head)
 
         self.linear = nn.Linear(self.embedding_dim, self.embedding_dim)
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(config['dropout'])
 
     def forward(self, x):
         attention_list = [head(x) for head in self.heads]
