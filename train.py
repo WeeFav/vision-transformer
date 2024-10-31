@@ -44,10 +44,10 @@ def main(run_dir):
 
     # model config
     config = {
-        'image_size': 224,
-        'patch_size': 16,
+        'image_size': 32,
+        'patch_size': 4,
         'num_channels': 3,
-        'embedding_dim': 384,
+        'embedding_dim': 48,
         'n_heads': 6,
         'hidden_dim': 192,
         'num_blocks': 4,
